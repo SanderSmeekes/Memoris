@@ -85,6 +85,21 @@ function dayBounds(_day: Day): { startHour: number; endHour: number } {
 
 const GRID_HOURS = Array.from({ length: DAY_END - DAY_START + 1 }, (_, i) => DAY_START + i)
 
+const FESTIVAL_DAY_DATES: Record<Day, string> = {
+  Thursday: "2026-07-02",
+  Friday:   "2026-07-03",
+  Saturday: "2026-07-04",
+  Sunday:   "2026-07-05",
+}
+
+function currentFestivalDay(): Day | null {
+  const today = new Date().toISOString().slice(0, 10)
+  for (const [day, date] of Object.entries(FESTIVAL_DAY_DATES)) {
+    if (date === today) return day as Day
+  }
+  return null
+}
+
 function slotKey(day: Day, stage: Stage, slot: SlotEntry): string {
   return `${day}__${stage}__${slot.artist}__${slot.start_time}`
 }
@@ -162,6 +177,7 @@ function EventCard({
   stage,
   isFav,
   dimmed,
+  ended,
   onToggleFav,
   onOpenArtist,
   diva,
@@ -172,6 +188,7 @@ function EventCard({
   stage: Stage
   isFav: boolean
   dimmed: boolean
+  ended?: boolean
   onToggleFav: () => void
   onOpenArtist: (id: string) => void
   diva?: boolean
@@ -209,7 +226,8 @@ function EventCard({
         justifyContent: compact ? "center" : "space-between",
         boxShadow: diva ? "var(--diva-card-glow)" : "none",
         userSelect: "none",
-        opacity: dimmed ? 0.35 : 1,
+        opacity: dimmed ? 0.35 : ended ? 0.4 : 1,
+        filter: ended ? "grayscale(0.7)" : "none",
         transition: "opacity 0.2s ease",
       }}
     >
@@ -679,6 +697,8 @@ function TimetableGrid({
   )
   const nowTop = (nowFestivalHour - startHour) * PX_PER_HOUR
   const showNowLine = nowFestivalHour >= startHour && nowFestivalHour <= endHour
+  const isToday = FESTIVAL_DAY_DATES[day] === now.toISOString().slice(0, 10)
+  const isPastDay = FESTIVAL_DAY_DATES[day] < now.toISOString().slice(0, 10)
 
   // Scroll to current time on mount, centred in the viewport
   useEffect(() => {
@@ -916,6 +936,7 @@ function TimetableGrid({
                 const key = slotKey(day, stage, slot)
                 const isFav  = favourites.has(key)
                 const dimmed = showFavs && !isFav
+                const ended  = isPastDay || (isToday && toFestivalHour(slot.end_time) <= nowFestivalHour)
                 return (
                   <EventCard
                     key={i}
@@ -923,6 +944,7 @@ function TimetableGrid({
                     stage={stage}
                     isFav={isFav}
                     dimmed={dimmed}
+                    ended={ended}
                     onToggleFav={() => onToggleFav(key)}
                     onOpenArtist={onOpenArtist}
                     diva={diva}
@@ -1289,7 +1311,7 @@ export default function App() {
   const [userName, setUserName] = useState<UserRecord | null>(cachedAccount)
   const [sessionChecked, setSessionChecked] = useState(!!cachedAccount)
   const [favsLoading, setFavsLoading] = useState(false)
-  const [activeDay, setActiveDay] = useState<Day>("Thursday")
+  const [activeDay, setActiveDay] = useState<Day>(() => currentFestivalDay() ?? "Thursday")
   const [favourites, setFavourites] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem(LS_KEY)
